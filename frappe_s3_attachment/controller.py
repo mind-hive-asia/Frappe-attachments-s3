@@ -135,8 +135,8 @@ class S3Operations:
                 #     "file_name": safe_file_name
                 # }
             }
-            if not is_private:
-                extra_args["ACL"] = "public-read"
+            # if not is_private:
+            #     extra_args["ACL"] = "public-read"
 
             self.S3_CLIENT.upload_file(
                 abs_path, self.BUCKET, key, ExtraArgs=extra_args
