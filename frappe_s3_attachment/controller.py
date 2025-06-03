@@ -59,7 +59,7 @@ class S3Operations:
 
     def sanitize_key_component(self, value: str) -> str:
         """Sanitize folder or file components for S3 key usage."""
-        return value.replace(" ", "_").replace("/", "_").strip()
+        return value.replace(" ", "_").replace("/", "_").strip() if value else ""
 
     def key_generator(self, file_name, parent_doctype, parent_name):
         """
