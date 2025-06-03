@@ -131,12 +131,7 @@ class S3Operations:
             extra_args = {
                 "ContentType": mime_type,
                 "ServerSideEncryption": "AES256",
-                # "Metadata": {
-                #     "file_name": safe_file_name
-                # }
             }
-            # if not is_private:
-            #     extra_args["ACL"] = "public-read"
 
             self.S3_CLIENT.upload_file(
                 abs_path, self.BUCKET, key, ExtraArgs=extra_args
@@ -145,8 +140,6 @@ class S3Operations:
         except boto3.exceptions.S3UploadFailedError as e:
             frappe.throw(frappe._(f"""File Upload Failed. Please try again.
                 Uploading to S3:
-                - Key: {self.s3_settings_doc.aws_key}
-                - Secret: {self.s3_settings_doc.aws_secret}
                 - Bucket: {self.BUCKET}
                 - Region: {self.s3_settings_doc.region_name}
                 - File Key: {key}
@@ -157,7 +150,6 @@ class S3Operations:
             """))
 
         return key
-
 
     def delete_from_s3(self, key):
         """Delete file from s3"""
@@ -218,7 +210,6 @@ class S3Operations:
 
 s3_upload = S3Operations()
 
-
 @frappe.whitelist()
 def file_upload_to_s3(doc, method):
     """
@@ -262,7 +253,6 @@ def file_upload_to_s3(doc, method):
 
         frappe.db.commit()
 
-
 @frappe.whitelist()
 def generate_file(key=None, file_name=None):
     """
@@ -276,7 +266,6 @@ def generate_file(key=None, file_name=None):
     else:
         frappe.local.response['body'] = "Key not found."
     return
-
 
 def upload_existing_files_s3(name, file_name):
     """
@@ -317,7 +306,6 @@ def upload_existing_files_s3(name, file_name):
     else:
         pass
 
-
 def s3_file_regex_match(file_url):
     """
     Match the public file regex match.
@@ -326,7 +314,6 @@ def s3_file_regex_match(file_url):
         r'^(https:|/api/method/frappe_s3_attachment.controller.generate_file)',
         file_url
     )
-
 
 @frappe.whitelist()
 def migrate_existing_files():
@@ -344,12 +331,10 @@ def migrate_existing_files():
                 upload_existing_files_s3(file['name'], file['file_name'])
     return True
 
-
 def delete_from_cloud(doc, method):
     """Delete file from s3"""
     s3 = S3Operations()
     s3.delete_from_s3(doc.content_hash)
-
 
 @frappe.whitelist()
 def ping():
