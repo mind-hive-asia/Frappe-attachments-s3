@@ -208,50 +208,87 @@ class S3Operations:
 
         return url
 
+    def public_url(self, key: str) -> str:
+        return f"{self.S3_CLIENT.meta.endpoint_url}/{self.BUCKET}/{key}"
+
 s3_upload = S3Operations()
 
 @frappe.whitelist()
 def file_upload_to_s3(doc, method):
     """
-    check and upload files to s3. the path check and
+    check and upload files to s3. skips upload if doc.file_url already
+    points at an existing S3 object.
     """
-    s3_upload = S3Operations()    
-    path = doc.file_url
-    site_path = frappe.utils.get_site_path()
+    s3_upload = S3Operations()
+    bucket_url = s3_upload.S3_CLIENT.meta.endpoint_url.rstrip('/')
+    bucket_name = s3_upload.BUCKET
+
+    # If file_url already lives on S3, check its existence and skip
+    if doc.file_url and doc.file_url.startswith(bucket_url):
+        # extract key from URL: https://…/<bucket_name>/<key>
+        prefix = f"{bucket_url}/{bucket_name}/"
+        if doc.file_url.startswith(prefix):
+            key = doc.file_url[len(prefix):]
+            try:
+                # head_object will throw if the key is missing
+                s3_upload.S3_CLIENT.head_object(Bucket=bucket_name, Key=key)
+                # already uploaded, nothing to do
+                return
+            except Exception:
+                # object missing or access issue → fall through to re-upload
+                pass
+
+    # only non-ignored doctypes get uploaded
     parent_doctype = doc.attached_to_doctype or 'File'
-    parent_name = doc.attached_to_name
-    ignore_s3_upload_for_doctype = frappe.local.conf.get('ignore_s3_upload_for_doctype') or ['Data Import']
-    if parent_doctype not in ignore_s3_upload_for_doctype:
-        if not doc.is_private:
-            file_path = site_path + '/public' + path
-        else:
-            file_path = site_path + path
-        key = s3_upload.upload_files_to_s3_with_key(
-            file_path, doc.file_name,
-            doc.is_private, parent_doctype,
-            parent_name
-        )
+    ignore = frappe.local.conf.get('ignore_s3_upload_for_doctype') or ['Data Import']
+    if parent_doctype in ignore:
+        return
 
-        if doc.is_private:
-            method = "frappe_s3_attachment.controller.generate_file"
-            file_url = """/api/method/{0}?key={1}&file_name={2}""".format(method, key, doc.file_name)
-        else:
-            file_url = '{}/{}/{}'.format(
-                s3_upload.S3_CLIENT.meta.endpoint_url,
-                s3_upload.BUCKET,
-                key
-            )
+    # determine local path
+    site_path = frappe.utils.get_site_path()
+    if not doc.is_private:
+        file_path = site_path + '/public' + doc.file_url
+    else:
+        file_path = site_path + doc.file_url
+
+    # perform upload
+    key = s3_upload.upload_files_to_s3_with_key(
+        file_path, doc.file_name,
+        doc.is_private, parent_doctype,
+        doc.attached_to_name
+    )
+
+    # build the new URL
+    if doc.is_private:
+        method = "frappe_s3_attachment.controller.generate_file"
+        file_url = f"/api/method/{method}?key={key}&file_name={doc.file_name}"
+    else:
+        file_url = f"{bucket_url}/{bucket_name}/{key}"
+
+    # clean up local and update File record
+    try:
         os.remove(file_path)
-        frappe.db.sql("""UPDATE `tabFile` SET file_url=%s, folder=%s,
-            old_parent=%s, content_hash=%s WHERE name=%s""", (
-            file_url, 'Home/Attachments', 'Home/Attachments', key, doc.name))
-        
-        doc.file_url = file_url
-        
-        if parent_doctype and frappe.get_meta(parent_doctype).get('image_field'):
-            frappe.db.set_value(parent_doctype, parent_name, frappe.get_meta(parent_doctype).get('image_field'), file_url)
+    except OSError:
+        pass
 
-        frappe.db.commit()
+    frappe.db.sql("""
+        UPDATE `tabFile`
+        SET file_url=%s,
+            folder='Home/Attachments',
+            old_parent='Home/Attachments',
+            content_hash=%s
+        WHERE name=%s
+    """, (file_url, key, doc.name))
+
+    doc.file_url = file_url
+
+    # if this File is an image field on its parent, sync it
+    img_field = frappe.get_meta(parent_doctype).get('image_field')
+    if parent_doctype and img_field:
+        frappe.db.set_value(parent_doctype, doc.attached_to_name, img_field, file_url)
+
+    frappe.db.commit()
+
 
 @frappe.whitelist()
 def generate_file(key=None, file_name=None):
