@@ -63,7 +63,7 @@ class S3Operations:
 
     def key_generator(self, file_name, parent_doctype, parent_name):
         """
-        Generate safe S3 key for uploading a file.
+        Generate safe S3 key for uploading a file, including the current site_name.
         """
         # Check if a custom hook is defined
         hook_cmd = frappe.get_hooks().get("s3_key_generator")
@@ -79,6 +79,10 @@ class S3Operations:
             except Exception:
                 pass  # fail silently and continue to default logic
 
+        # Get current site name
+        site_name = frappe.local.site if hasattr(frappe.local, "site") else None
+        site_name = self.sanitize_key_component(site_name) if site_name else "default_site"
+
         # Sanitize file name and other components
         file_name = self.sanitize_key_component(self.strip_special_chars(file_name))
         parent_doctype = self.sanitize_key_component(parent_doctype)
@@ -93,8 +97,8 @@ class S3Operations:
         today = datetime.datetime.now()
         year, month, day = today.strftime("%Y"), today.strftime("%m"), today.strftime("%d")
 
-        # Construct key
-        parts = [folder, year, month, day, parent_doctype, f"{unique_key}_{file_name}"]
+        # Construct key, now including site_name
+        parts = [folder, site_name, year, month, day, parent_doctype, f"{unique_key}_{file_name}"]
         final_key = "/".join(part for part in parts if part)
 
         frappe.logger().info(f"[S3 Upload] Generated key: {final_key}")
