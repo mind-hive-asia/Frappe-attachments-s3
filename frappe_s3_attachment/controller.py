@@ -41,6 +41,10 @@ class S3Operations:
             client_args["aws_access_key_id"] = self.s3_settings_doc.aws_key
             client_args["aws_secret_access_key"] = self.s3_settings_doc.aws_secret
 
+        # Pass custom endpoint URL if configured
+        if getattr(self.s3_settings_doc, "endpoint_url", None):
+            client_args["endpoint_url"] = self.s3_settings_doc.endpoint_url
+
         self.S3_CLIENT = boto3.client("s3", **client_args)
 
         frappe.logger().info(
@@ -168,6 +172,7 @@ class S3Operations:
                 aws_access_key_id=self.s3_settings_doc.aws_key,
                 aws_secret_access_key=self.s3_settings_doc.aws_secret,
                 region_name=self.s3_settings_doc.region_name,
+                endpoint_url=self.s3_settings_doc.endpoint_url,
                 config=Config(signature_version='s3v4')
             )
 
