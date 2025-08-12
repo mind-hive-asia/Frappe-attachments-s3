@@ -1,0 +1,1 @@
+frappe_s3_attachment.patches.seed_s3_config
